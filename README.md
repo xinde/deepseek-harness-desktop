@@ -37,11 +37,20 @@ The first launch prompts for the checkout directory. Later launches use the save
 
 Launcher state and logs live in Electron's application data directory, outside the checkout. dsh continues to own `$DSH_HOME`, settings, credentials, profiles, and sessions.
 
+## Windows notes
+
+The launcher is developed on macOS; on Windows it works, but you must set a few things by hand first.
+
+- **Set `DSH_NODE`, `DSH_PNPM`, and `DSH_GIT` to absolute paths.** The launcher finds `node`, `pnpm`, and `git` by running `command -v <name>` in a POSIX shell (`$SHELL`, falling back to `/bin/zsh`). Windows has no POSIX shell and no `command -v` by default, so automatic detection always fails and startup stops with a "找不到 …" error. Point each variable at the real binary, e.g. `DSH_NODE=C:\Program Files\nodejs\node.exe`.
+- **Point `DSH_PNPM` at an executable, not a `.cmd` shim.** Child processes are started with `child_process.spawn`, which on Windows cannot run `.cmd`/`.bat` wrappers directly (they fail with `ENOENT`). npm installs pnpm as a `pnpm.cmd` wrapper, so a plain npm-installed pnpm may not work; prefer a pnpm build that ships a native executable, such as `@pnpm/exe`.
+- **`DSH_REPOSITORY` is a Windows path**, for example `C:\dev\deepseek-harness`. The log is at `%APPDATA%\deepseek-harness-desktop\launcher.log` (see Privacy & logs).
+- **Only the macOS package target is configured.** `package.json` ships `package:mac` only and there is no Windows installer target yet. To build a Windows installer, add an `nsis` or `portable` target to `package.json` and run the build on Windows.
+
 ## Privacy & logs
 
 The launcher is local-only: it does not phone home or upload anything. Two things to know before sharing logs:
 
-- On startup the launcher writes `using repository <absolute path>` to `launcher.log` in Electron's userData directory (e.g. `~/Library/Application Support/DeepSeek Harness/`). The log also captures the stdout/stderr of `pnpm install`, `pnpm run build`, and `dsh web`. If you paste this log into an issue, it will reveal your local directory layout and username.
+- On startup the launcher writes `using repository <absolute path>` to `launcher.log` in Electron's userData directory (e.g. `~/Library/Application Support/deepseek-harness-desktop/` on macOS, `%APPDATA%\deepseek-harness-desktop\` on Windows). The log also captures the stdout/stderr of `pnpm install`, `pnpm run build`, and `dsh web`. If you paste this log into an issue, it will reveal your local directory layout and username.
 - The launcher inherits your environment when starting child processes (`pnpm`, `node`). If you export API keys or tokens in your shell, those environment variables are passed through to `dsh`. Do not paste environment output into a public issue.
 
 ## macOS package

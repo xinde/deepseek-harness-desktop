@@ -37,11 +37,20 @@ pnpm dsh web
 
 启动器状态和日志存放在 Electron 的应用数据目录中，位于代码库之外。dsh 继续自行管理 `$DSH_HOME`、设置、凭据、配置和会话。
 
+## Windows 平台说明
+
+本启动器在 macOS 上开发，Windows 下能用，但需要先手动设置几项。
+
+- **务必把 `DSH_NODE`、`DSH_PNPM`、`DSH_GIT` 设为绝对路径。** 启动器查找 `node`、`pnpm`、`git` 的方式是在 POSIX shell（`$SHELL`，缺省回退到 `/bin/zsh`）里执行 `command -v <名称>`。Windows 默认没有 POSIX shell，也没有 `command -v`，自动探测必然失败，启动会停在"找不到 …"的报错。请把每个变量指向真实的可执行文件，比如 `DSH_NODE=C:\Program Files\nodejs\node.exe`。
+- **`DSH_PNPM` 要指向可执行文件，不能是 `.cmd` 垫片。** 子进程用 `child_process.spawn` 启动，在 Windows 上它无法直接运行 `.cmd`/`.bat` 包装脚本（会报 `ENOENT`）。npm 安装的 pnpm 实际是一个 `pnpm.cmd` 垫片，所以直接用 npm 装的 pnpm 可能跑不起来；建议改用自带原生可执行文件的 pnpm 版本，比如 `@pnpm/exe`。
+- **`DSH_REPOSITORY` 是 Windows 路径**，比如 `C:\dev\deepseek-harness`。日志在 `%APPDATA%\deepseek-harness-desktop\launcher.log`（见「隐私与日志」）。
+- **目前只配置了 macOS 打包。** `package.json` 里只有 `package:mac`，还没有 Windows 安装包目标。要出 Windows 安装包，需要在 `package.json` 里加 `nsis` 或 `portable` 目标，并在 Windows 上执行构建。
+
 ## 隐私与日志
 
 本启动器完全本地运行，不联网上报任何数据。分享日志前有两点需要注意：
 
-- 启动时，launcher 会把 `using repository <绝对路径>` 写入 Electron userData 目录下的 `launcher.log`（比如 `~/Library/Application Support/DeepSeek Harness/`）。日志还会记录 `pnpm install`、`pnpm run build`、`dsh web` 的标准输出和标准错误。如果把这份日志贴到 issue 里，会暴露你的本地目录结构和用户名。
+- 启动时，launcher 会把 `using repository <绝对路径>` 写入 Electron userData 目录下的 `launcher.log`（macOS 上比如 `~/Library/Application Support/deepseek-harness-desktop/`，Windows 上是 `%APPDATA%\deepseek-harness-desktop\`）。日志还会记录 `pnpm install`、`pnpm run build`、`dsh web` 的标准输出和标准错误。如果把这份日志贴到 issue 里，会暴露你的本地目录结构和用户名。
 - 启动器启动子进程（`pnpm`、`node`）时会继承你的环境变量。如果 shell 里导出了 API key 或 token，这些环境变量会透传给 `dsh`。请不要把环境变量输出贴到公开 issue 中。
 
 ## macOS 打包
