@@ -1,0 +1,49 @@
+{
+  "name": "deepseek-harness-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "author": "DeepSeek Harness Desktop contributors",
+  "type": "module",
+  "description": "External Electron launcher for a local deepseek-harness checkout",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "pnpm run build && electron .",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "package:mac": "pnpm run build && electron-builder --mac dmg"
+  },
+  "build": {
+    "appId": "ai.deepseek.harness.desktop.local",
+    "productName": "DeepSeek Harness",
+    "directories": {
+      "output": "release"
+    },
+    "electronDist": "node_modules/electron/dist",
+    "files": [
+      "dist/**/*",
+      "src/index.html",
+      "src/deepseek.svg",
+      "src/styles.css",
+      "package.json"
+    ],
+    "asar": true,
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "build/icon.icns",
+      "target": [
+        "dmg"
+      ]
+    },
+    "dmg": {
+      "title": "DeepSeek Harness"
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "electron": "^43.4.0",
+    "electron-builder": "^26.15.3",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}

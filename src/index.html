@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'">
+    <title>DeepSeek Harness</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body data-phase="locating">
+    <main>
+      <div class="mark" aria-hidden="true"><img src="deepseek.svg" alt=""></div>
+      <h1>DeepSeek Harness</h1>
+      <div class="spinner" aria-hidden="true"></div>
+      <p id="status">正在定位本地仓库…</p>
+      <pre id="detail"></pre>
+      <div id="actions" class="actions" hidden>
+        <button id="retry" type="button">重试</button>
+        <button id="choose" type="button">选择仓库</button>
+        <button id="logs" type="button" class="secondary">查看日志</button>
+      </div>
+    </main>
+    <script type="module" src="../dist/renderer.js"></script>
+  </body>
+</html>
