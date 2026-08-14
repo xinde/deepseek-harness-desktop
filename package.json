@@ -11,7 +11,8 @@
     "dev": "pnpm run build && electron .",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "package:mac": "pnpm run build && electron-builder --mac dmg"
+    "package:mac": "pnpm run build && electron-builder --mac dmg",
+    "package:mac-intel": "pnpm run build && electron-builder --mac dmg --x64"
   },
   "build": {
     "appId": "ai.deepseek.harness.desktop.local",
@@ -19,7 +20,6 @@
     "directories": {
       "output": "release"
     },
-    "electronDist": "node_modules/electron/dist",
     "files": [
       "dist/**/*",
       "src/index.html",
@@ -33,7 +33,8 @@
       "icon": "build/icon.icns",
       "target": [
         "dmg"
-      ]
+      ],
+      "artifactName": "DeepSeek Harness-${version}-${arch}.${ext}"
     },
     "dmg": {
       "title": "DeepSeek Harness"

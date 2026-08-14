@@ -56,10 +56,11 @@ pnpm dsh web
 ## macOS 打包
 
 ```sh
-pnpm package:mac
+pnpm package:mac        # Apple Silicon (arm64)
+pnpm package:mac-intel  # Intel (x64)
 ```
 
-DMG 会生成在 `release/` 目录下。未签名的本地构建在别的机器上可能触发 Gatekeeper 警告；公开分发需要 Apple Developer 证书和 notarization。
+DMG 会生成在 `release/` 目录下，文件名带架构后缀：`DeepSeek Harness-<version>-arm64.dmg` 或 `DeepSeek Harness-<version>-x64.dmg`。在跟本机架构不同的机器上首次构建会下载对应的 Electron 二进制。未签名的本地构建在别的机器上可能触发 Gatekeeper 警告；公开分发需要 Apple Developer 证书和 notarization。
 
 ## 更新 dsh
 
