@@ -1,5 +1,7 @@
 # DeepSeek Harness Desktop
 
+English | [中文](README.zh.md)
+
 An external Electron launcher for a local [`deepseek-harness`](https://github.com/deepseek-ai/deepseek-harness) checkout. This project never writes source or configuration into the upstream Git repository.
 
 ## Prerequisites: run DeepSeek Harness from source first
