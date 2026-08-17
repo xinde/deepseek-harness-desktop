@@ -6,6 +6,7 @@ import { promisify } from 'node:util'
 import { spawn, type ChildProcessByStdio } from 'node:child_process'
 import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
 import {
+  childEnvironment,
   parseDshWebUrl,
   REQUIRED_BUILD_ARTIFACTS,
   shouldBuild,
@@ -130,23 +131,30 @@ async function bootstrap(): Promise<void> {
     await validateRepository(repositoryPath)
     await appendLog(`using repository ${repositoryPath}`)
 
-    const head = await gitHead(repositoryPath)
+    const loginEnvironment = await resolveLoginEnvironment()
+    const git = await resolveExecutable('git', 'DSH_GIT', loginEnvironment)
+    const gitEnvironment = childEnvironment(loginEnvironment, [git])
+    const head = await gitHead(git, repositoryPath, gitEnvironment)
     const state = await readState()
     const artifactsPresent = await allArtifactsPresent(repositoryPath)
+    let node: string | undefined
     if (shouldBuild({ head, lastBuiltCommit: state.lastBuiltCommit, artifactsPresent })) {
-      const pnpm = await resolveExecutable('pnpm', 'DSH_PNPM')
+      node = await resolveExecutable('node', 'DSH_NODE', loginEnvironment)
+      const pnpm = await resolveExecutable('pnpm', 'DSH_PNPM', loginEnvironment)
+      const buildEnvironment = childEnvironment(loginEnvironment, [git, node, pnpm])
       updateStatus({ phase: 'installing', message: '检测到新的 dsh 版本，正在同步依赖…', detail: shortCommit(head) })
-      await runChecked(pnpm, ['install', '--frozen-lockfile'], repositoryPath, 'pnpm install')
+      await runChecked(pnpm, ['install', '--frozen-lockfile'], repositoryPath, 'pnpm install', buildEnvironment)
       updateStatus({ phase: 'building', message: '正在构建 DeepSeek Harness…', detail: shortCommit(head) })
-      await runChecked(pnpm, ['run', 'build'], repositoryPath, 'pnpm run build')
+      await runChecked(pnpm, ['run', 'build'], repositoryPath, 'pnpm run build', buildEnvironment)
       await writeState({ ...state, repositoryPath, lastBuiltCommit: head })
     } else if (state.repositoryPath !== repositoryPath) {
       await writeState({ ...state, repositoryPath })
     }
 
     updateStatus({ phase: 'starting', message: '正在启动 DeepSeek Harness…', detail: shortCommit(head) })
-    const node = await resolveExecutable('node', 'DSH_NODE')
-    const url = await startDsh(node, repositoryPath)
+    node ??= await resolveExecutable('node', 'DSH_NODE', loginEnvironment)
+    const runtimeEnvironment = childEnvironment(loginEnvironment, [git, node])
+    const url = await startDsh(node, repositoryPath, runtimeEnvironment)
     updateStatus({ phase: 'ready', message: 'DeepSeek Harness 已启动' })
     await window?.loadURL(url)
   } catch (error: unknown) {
@@ -186,9 +194,12 @@ async function resolveRepository(): Promise<string> {
   return repositoryPath
 }
 
-async function gitHead(repositoryPath: string): Promise<string> {
-  const git = await resolveExecutable('git', 'DSH_GIT')
-  const { stdout } = await execFileAsync(git, ['rev-parse', 'HEAD'], { cwd: repositoryPath, encoding: 'utf8' })
+async function gitHead(git: string, repositoryPath: string, environment: NodeJS.ProcessEnv): Promise<string> {
+  const { stdout } = await execFileAsync(git, ['rev-parse', 'HEAD'], {
+    cwd: repositoryPath,
+    encoding: 'utf8',
+    env: environment,
+  })
   const head = stdout.trim()
   if (!/^[0-9a-f]{40}$/u.test(head)) throw new Error(`无法识别 Git commit：${JSON.stringify(head)}`)
   return head
@@ -205,13 +216,35 @@ async function allArtifactsPresent(repositoryPath: string): Promise<boolean> {
   return true
 }
 
-async function resolveExecutable(name: 'git' | 'node' | 'pnpm', environmentName: string): Promise<string> {
-  const configured = process.env[environmentName]
+async function resolveLoginEnvironment(): Promise<NodeJS.ProcessEnv> {
+  const shellPath = process.env.SHELL ?? '/bin/zsh'
+  try {
+    const { stdout } = await execFileAsync(shellPath, ['-lc', 'printf "__DSH_PATH__=%s\\n" "$PATH"'], {
+      encoding: 'utf8',
+      timeout: 15_000,
+    })
+    const marker = '__DSH_PATH__='
+    const line = stdout.trim().split('\n').findLast((candidate) => candidate.startsWith(marker))
+    const loginPath = line?.slice(marker.length)
+    if (loginPath !== undefined && loginPath !== '') return { ...process.env, PATH: loginPath }
+  } catch (error: unknown) {
+    await appendLog(`failed to read login PATH: ${error instanceof Error ? error.message : String(error)}`)
+  }
+  throw new Error('无法读取登录 Shell 的 PATH。请检查 Shell 启动配置后重试。')
+}
+
+async function resolveExecutable(
+  name: 'git' | 'node' | 'pnpm',
+  environmentName: string,
+  environment: NodeJS.ProcessEnv,
+): Promise<string> {
+  const configured = environment[environmentName]
   if (configured !== undefined && configured.trim() !== '') return configured
   const shellPath = process.env.SHELL ?? '/bin/zsh'
   try {
     const { stdout } = await execFileAsync(shellPath, ['-lc', `command -v ${name}`], {
       encoding: 'utf8',
+      env: environment,
       timeout: 15_000,
     })
     const resolved = stdout.trim().split('\n').at(-1)
@@ -222,10 +255,16 @@ async function resolveExecutable(name: 'git' | 'node' | 'pnpm', environmentName:
   throw new Error(`找不到 ${name}。请安装后重新打开应用，或通过 ${environmentName} 指定绝对路径。`)
 }
 
-async function runChecked(command: string, args: string[], cwd: string, label: string): Promise<void> {
+async function runChecked(
+  command: string,
+  args: string[],
+  cwd: string,
+  label: string,
+  environment: NodeJS.ProcessEnv,
+): Promise<void> {
   await appendLog(`run ${label}`)
   await new Promise<void>((resolvePromise, reject) => {
-    const child = spawn(command, args, { cwd, env: process.env, stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn(command, args, { cwd, env: environment, stdio: ['ignore', 'pipe', 'pipe'] })
     let tail = ''
     const collect = (chunk: Buffer): void => {
       const text = chunk.toString('utf8')
@@ -242,10 +281,10 @@ async function runChecked(command: string, args: string[], cwd: string, label: s
   })
 }
 
-async function startDsh(node: string, repositoryPath: string): Promise<string> {
+async function startDsh(node: string, repositoryPath: string, environment: NodeJS.ProcessEnv): Promise<string> {
   const child = spawn(node, [join(repositoryPath, 'apps', 'cli', 'lib', 'bin.js'), 'web', '--port', '0'], {
     cwd: repositoryPath,
-    env: process.env,
+    env: environment,
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   dshProcess = child

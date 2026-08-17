@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { delimiter, dirname, join } from 'node:path'
 
 /** Files that prove the checkout has both production launch surfaces. */
 export const REQUIRED_BUILD_ARTIFACTS = [
@@ -18,6 +18,20 @@ export interface BuildSnapshot {
   head: string
   lastBuiltCommit: string | undefined
   artifactsPresent: boolean
+}
+
+/** Add resolved tool directories to the executable search path inherited by subprocesses. */
+export function childEnvironment(
+  environment: NodeJS.ProcessEnv,
+  executablePaths: readonly string[],
+): NodeJS.ProcessEnv {
+  const pathKey = Object.keys(environment).find((key) => key.toLowerCase() === 'path') ?? 'PATH'
+  const inherited = environment[pathKey]?.split(delimiter) ?? []
+  const entries = executablePaths.map((executablePath) => dirname(executablePath))
+  return {
+    ...environment,
+    [pathKey]: [...new Set([...entries, ...inherited].filter((entry) => entry !== ''))].join(delimiter),
+  }
 }
 
 /** Return whether this checkout must be installed and rebuilt before launch. */

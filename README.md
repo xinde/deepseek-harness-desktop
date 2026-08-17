@@ -28,6 +28,8 @@ Once the upstream checkout builds and runs `dsh web` successfully, install and l
 
 On launch, the app locates the checkout, compares its current Git commit with the last successful desktop build, and runs `pnpm install --frozen-lockfile` plus `pnpm run build` when required. It then starts the built `dsh web --port 0`, waits for the OS-assigned loopback URL, and loads that URL in the application window. Closing the app terminates dsh gracefully.
 
+When launched from Finder, the app reads the login Shell's executable search path and passes it to Git, Node.js, pnpm, and dsh subprocesses. This keeps Homebrew, pnpm, and version-manager installations available even though macOS GUI applications start with a minimal `PATH`.
+
 The first launch prompts for the checkout directory. Later launches use the saved path. These environment variables override discovery:
 
 - `DSH_REPOSITORY`: absolute path to the deepseek-harness checkout.
