@@ -4,25 +4,21 @@ English | [中文](README.zh.md)
 
 An external Electron launcher for a local [`deepseek-harness`](https://github.com/deepseek-ai/deepseek-harness) checkout. This project never writes source or configuration into the upstream Git repository.
 
-## Prerequisites: run DeepSeek Harness from source first
+## Prerequisites
 
-This launcher does **not** install DeepSeek Harness for you — it launches the Web UI from a local checkout of the upstream repository. Before installing this launcher, follow the **Run from source** instructions in the upstream [`deepseek-harness` README](https://github.com/deepseek-ai/deepseek-harness#run-from-source):
+This launcher uses an existing checkout of the upstream repository and builds it automatically when required. Clone the repository before starting the desktop app:
 
 ```sh
 git clone https://github.com/deepseek-ai/deepseek-harness.git
-cd deepseek-harness
-pnpm install
-pnpm run build
-pnpm dsh web
 ```
 
 Requirements:
 
-- **Node.js** (the upstream project requires a recent LTS version)
-- **pnpm** (the upstream project's package manager)
+- **Node.js** matching the upstream `package.json` engine requirement
+- **pnpm** matching the upstream `packageManager` declaration
 - **Git** (used to read the checkout's commit)
 
-Once the upstream checkout builds and runs `dsh web` successfully, install and launch this desktop launcher. On first launch it asks for the checkout directory; later launches reuse the saved path.
+Install and launch the desktop app after the checkout and tools are available. On first launch it asks for the checkout directory, installs dependencies and builds dsh when needed, then remembers that path for later launches.
 
 ## Behavior
 
@@ -39,14 +35,11 @@ The first launch prompts for the checkout directory. Later launches use the save
 
 Launcher state and logs live in Electron's application data directory, outside the checkout. dsh continues to own `$DSH_HOME`, settings, credentials, profiles, and sessions.
 
-## Windows notes
+## Windows status
 
-The launcher is developed on macOS; on Windows it works, but you must set a few things by hand first.
+Windows is not currently supported. The launcher reads a POSIX login Shell environment and resolves tools with `command -v`, and the package configuration currently produces macOS DMGs only. Setting `DSH_NODE`, `DSH_PNPM`, and `DSH_GIT` does not bypass the login Shell requirement.
 
-- **Set `DSH_NODE`, `DSH_PNPM`, and `DSH_GIT` to absolute paths.** The launcher finds `node`, `pnpm`, and `git` by running `command -v <name>` in a POSIX shell (`$SHELL`, falling back to `/bin/zsh`). Windows has no POSIX shell and no `command -v` by default, so automatic detection always fails and startup stops with a "找不到 …" error. Point each variable at the real binary, e.g. `DSH_NODE=C:\Program Files\nodejs\node.exe`.
-- **Point `DSH_PNPM` at an executable, not a `.cmd` shim.** Child processes are started with `child_process.spawn`, which on Windows cannot run `.cmd`/`.bat` wrappers directly (they fail with `ENOENT`). npm installs pnpm as a `pnpm.cmd` wrapper, so a plain npm-installed pnpm may not work; prefer a pnpm build that ships a native executable, such as `@pnpm/exe`.
-- **`DSH_REPOSITORY` is a Windows path**, for example `C:\dev\deepseek-harness`. The log is at `%APPDATA%\deepseek-harness-desktop\launcher.log` (see Privacy & logs).
-- **Only the macOS package target is configured.** `package.json` ships `package:mac` only and there is no Windows installer target yet. To build a Windows installer, add an `nsis` or `portable` target to `package.json` and run the build on Windows.
+A Windows release needs native tool discovery, `.cmd` process handling, process-tree shutdown, Windows CI coverage, and an NSIS or portable package target.
 
 ## Privacy & logs
 
@@ -57,12 +50,19 @@ The launcher is local-only: it does not phone home or upload anything. Two thing
 
 ## macOS package
 
+Choose the DMG that matches the Mac:
+
+| Mac | Package |
+| --- | --- |
+| Apple Silicon (M1 and later) | `DeepSeek Harness-<version>-arm64.dmg` |
+| Intel | `DeepSeek Harness-<version>-x64.dmg` |
+
 ```sh
 pnpm package:mac        # Apple Silicon (arm64)
 pnpm package:mac-intel  # Intel (x64)
 ```
 
-The DMG is written under `release/` and named with its architecture: `DeepSeek Harness-<version>-arm64.dmg` or `DeepSeek Harness-<version>-x64.dmg`. Building for a different architecture than your machine downloads the matching Electron binary on first run. An unsigned local build may trigger Gatekeeper warnings on another machine; public distribution requires an Apple Developer certificate and notarization.
+The DMG is written under `release/` and named with its architecture. Building for a different architecture than your machine downloads the matching Electron binary on first run. Before replacing an installed copy, quit the old app completely with Command-Q, then drag the new copy into Applications and choose Replace. An unsigned local build may trigger Gatekeeper warnings on another machine; use Finder's Open command for the first launch. Public distribution requires an Apple Developer certificate and notarization.
 
 ## Updating dsh
 
