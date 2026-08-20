@@ -282,7 +282,7 @@ async function runChecked(
 }
 
 async function startDsh(node: string, repositoryPath: string, environment: NodeJS.ProcessEnv): Promise<string> {
-  const child = spawn(node, [join(repositoryPath, 'apps', 'cli', 'lib', 'bin.js'), 'web', '--port', '0'], {
+  const child = spawn(node, [join(repositoryPath, 'apps', 'cli', 'lib', 'bin.js'), 'web', '--port', '0', '--no-open'], {
     cwd: repositoryPath,
     env: environment,
     stdio: ['ignore', 'pipe', 'pipe'],
