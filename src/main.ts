@@ -7,17 +7,18 @@ import { spawn, type ChildProcessByStdio } from 'node:child_process'
 import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
 import {
   childEnvironment,
+  DEFAULT_LAUNCHER_CONFIG,
   parseDshWebUrl,
-  REQUIRED_BUILD_ARTIFACTS,
+  redactDshOutput,
+  resolveLauncherConfig,
   shouldBuild,
+  type LauncherConfig,
   type LauncherState,
   validateRepository,
 } from './launcher.js'
 
 const execFileAsync = promisify(execFile)
 const OUTPUT_LIMIT = 256 * 1024
-const START_TIMEOUT_MS = 90_000
-const SHUTDOWN_TIMEOUT_MS = 8_000
 
 interface LauncherStatus {
   phase: 'locating' | 'installing' | 'building' | 'starting' | 'ready' | 'error'
@@ -30,6 +31,7 @@ let dshProcess: ChildProcessByStdio<null, Readable, Readable> | undefined
 let currentStatus: LauncherStatus = { phase: 'locating', message: '正在定位本地仓库…' }
 let bootInFlight = false
 let quitting = false
+let shutdownTimeoutMs = DEFAULT_LAUNCHER_CONFIG.shutdownTimeoutMs
 
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) app.quit()
@@ -123,6 +125,8 @@ async function bootstrap(): Promise<void> {
   bootInFlight = true
   try {
     await stopDsh()
+    const launcherConfig = resolveLauncherConfig(process.env)
+    shutdownTimeoutMs = launcherConfig.shutdownTimeoutMs
     if (window === undefined || window.isDestroyed()) await createWindow()
     else if (!window.webContents.getURL().startsWith('file://')) await loadLauncherPage()
 
@@ -136,7 +140,7 @@ async function bootstrap(): Promise<void> {
     const gitEnvironment = childEnvironment(loginEnvironment, [git])
     const head = await gitHead(git, repositoryPath, gitEnvironment)
     const state = await readState()
-    const artifactsPresent = await allArtifactsPresent(repositoryPath)
+    const artifactsPresent = await allArtifactsPresent(repositoryPath, launcherConfig.requiredBuildArtifacts)
     let node: string | undefined
     if (shouldBuild({ head, lastBuiltCommit: state.lastBuiltCommit, artifactsPresent })) {
       node = await resolveExecutable('node', 'DSH_NODE', loginEnvironment)
@@ -154,7 +158,7 @@ async function bootstrap(): Promise<void> {
     updateStatus({ phase: 'starting', message: '正在启动 DeepSeek Harness…', detail: shortCommit(head) })
     node ??= await resolveExecutable('node', 'DSH_NODE', loginEnvironment)
     const runtimeEnvironment = childEnvironment(loginEnvironment, [git, node])
-    const url = await startDsh(node, repositoryPath, runtimeEnvironment)
+    const url = await startDsh(node, repositoryPath, runtimeEnvironment, launcherConfig)
     updateStatus({ phase: 'ready', message: 'DeepSeek Harness 已启动' })
     await window?.loadURL(url)
   } catch (error: unknown) {
@@ -205,10 +209,10 @@ async function gitHead(git: string, repositoryPath: string, environment: NodeJS.
   return head
 }
 
-async function allArtifactsPresent(repositoryPath: string): Promise<boolean> {
-  for (const artifact of REQUIRED_BUILD_ARTIFACTS) {
+async function allArtifactsPresent(repositoryPath: string, artifacts: readonly string[]): Promise<boolean> {
+  for (const artifact of artifacts) {
     try {
-      await stat(join(repositoryPath, artifact))
+      await stat(resolve(repositoryPath, artifact))
     } catch {
       return false
     }
@@ -281,8 +285,13 @@ async function runChecked(
   })
 }
 
-async function startDsh(node: string, repositoryPath: string, environment: NodeJS.ProcessEnv): Promise<string> {
-  const child = spawn(node, [join(repositoryPath, 'apps', 'cli', 'lib', 'bin.js'), 'web', '--port', '0', '--no-open'], {
+async function startDsh(
+  node: string,
+  repositoryPath: string,
+  environment: NodeJS.ProcessEnv,
+  config: LauncherConfig,
+): Promise<string> {
+  const child = spawn(node, [resolve(repositoryPath, config.cliEntry), ...config.webArgs], {
     cwd: repositoryPath,
     env: environment,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -290,8 +299,11 @@ async function startDsh(node: string, repositoryPath: string, environment: NodeJ
   dshProcess = child
   return await new Promise<string>((resolvePromise, reject) => {
     let output = ''
+    let pendingLog = ''
     let settled = false
-    const timeout = setTimeout(() => finish(new Error(`dsh 在 ${String(START_TIMEOUT_MS / 1000)} 秒内没有完成启动。\n${output}`)), START_TIMEOUT_MS)
+    const timeout = setTimeout(() => finish(new Error(
+      `dsh 在 ${String(config.startTimeoutMs / 1000)} 秒内没有完成启动。\n${redactDshOutput(output)}`,
+    )), config.startTimeoutMs)
     const finish = (result: string | Error): void => {
       if (settled) return
       settled = true
@@ -302,7 +314,13 @@ async function startDsh(node: string, repositoryPath: string, environment: NodeJ
     const collect = (chunk: Buffer): void => {
       const text = chunk.toString('utf8')
       output = `${output}${text}`.slice(-OUTPUT_LIMIT)
-      void appendLog(text.trimEnd())
+      pendingLog = `${pendingLog}${text}`.slice(-OUTPUT_LIMIT)
+      const lineEnd = pendingLog.lastIndexOf('\n')
+      if (lineEnd !== -1) {
+        const completeLines = pendingLog.slice(0, lineEnd + 1)
+        pendingLog = pendingLog.slice(lineEnd + 1)
+        void appendLog(redactDshOutput(completeLines.trimEnd()))
+      }
       const url = parseDshWebUrl(output)
       if (url !== undefined) finish(url)
     }
@@ -310,9 +328,10 @@ async function startDsh(node: string, repositoryPath: string, environment: NodeJ
     child.stderr.on('data', collect)
     child.once('error', (error) => finish(error))
     child.once('exit', (code, signal) => {
+      if (pendingLog !== '') void appendLog(redactDshOutput(pendingLog))
       const wasCurrent = dshProcess === child
       if (wasCurrent) dshProcess = undefined
-      finish(new Error(`dsh 启动前退出（code=${String(code)}, signal=${String(signal)}）。\n${output}`))
+      finish(new Error(`dsh 启动前退出（code=${String(code)}, signal=${String(signal)}）。\n${redactDshOutput(output)}`))
       if (settled && wasCurrent && !quitting) {
         void loadLauncherPage().then(() => reportError(new Error(`dsh 已退出（code=${String(code)}, signal=${String(signal)}）。`)))
       }
@@ -330,7 +349,7 @@ async function stopDsh(): Promise<void> {
     const timeout = setTimeout(() => {
       child.kill('SIGKILL')
       resolvePromise()
-    }, SHUTDOWN_TIMEOUT_MS)
+    }, shutdownTimeoutMs)
     child.once('exit', () => {
       clearTimeout(timeout)
       resolvePromise()
@@ -339,7 +358,7 @@ async function stopDsh(): Promise<void> {
 }
 
 function reportError(error: unknown): void {
-  const message = error instanceof Error ? error.message : String(error)
+  const message = redactDshOutput(error instanceof Error ? error.message : String(error))
   void appendLog(`ERROR ${message}`)
   updateStatus({ phase: 'error', message: '无法启动 DeepSeek Harness', detail: message })
 }

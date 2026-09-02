@@ -26,7 +26,7 @@ Once the upstream checkout builds and runs `dsh web` successfully, install and l
 
 ## Behavior
 
-On launch, the app locates the checkout, compares its current Git commit with the last successful desktop build, and runs `pnpm install --frozen-lockfile` plus `pnpm run build` when required. It then starts the built `dsh web --port 0`, waits for the OS-assigned loopback URL, and loads that URL in the application window. Closing the app terminates dsh gracefully.
+On launch, the app locates the checkout, compares its current Git commit with the last successful desktop build, and runs `pnpm install --frozen-lockfile` plus `pnpm run build` when required. It then starts the built `dsh web --host 127.0.0.1 --port 0 --no-open`, waits for the complete loopback readiness URL (including any authentication path or query), and loads that URL in the application window. Port `0` asks the operating system for an available port, so changes to the upstream default port do not affect the launcher. Closing the app terminates dsh gracefully.
 
 When launched from Finder, the app reads the login Shell's executable search path and passes it to Git, Node.js, pnpm, and dsh subprocesses. This keeps Homebrew, pnpm, and version-manager installations available even though macOS GUI applications start with a minimal `PATH`.
 
@@ -36,6 +36,15 @@ The first launch prompts for the checkout directory. Later launches use the save
 - `DSH_NODE`: absolute path to Node.js.
 - `DSH_PNPM`: absolute path to pnpm.
 - `DSH_GIT`: absolute path to Git.
+
+The upstream launch contract is centralized and can be overridden without editing launcher code:
+
+- `DSH_DESKTOP_CLI_ENTRY`: repository-relative built CLI entry (default `apps/cli/lib/bin.js`).
+- `DSH_DESKTOP_WEB_HOST`: bind host used by the default argument list (default `127.0.0.1`).
+- `DSH_DESKTOP_WEB_PORT`: port used by the default argument list (default `0`; valid range `0`–`65535`).
+- `DSH_DESKTOP_WEB_ARGS`: non-empty JSON string array replacing the complete Web argument list. When set, it takes precedence over `DSH_DESKTOP_WEB_HOST` and `DSH_DESKTOP_WEB_PORT`; for example `["--profile","web","--port","0","--no-open"]`.
+- `DSH_DESKTOP_BUILD_ARTIFACTS`: non-empty JSON string array of repository-relative files used to decide whether a rebuild is required.
+- `DSH_DESKTOP_START_TIMEOUT_MS` and `DSH_DESKTOP_SHUTDOWN_TIMEOUT_MS`: positive integer timeout overrides in milliseconds.
 
 Launcher state and logs live in Electron's application data directory, outside the checkout. dsh continues to own `$DSH_HOME`, settings, credentials, profiles, and sessions.
 
@@ -52,7 +61,7 @@ The launcher is developed on macOS; on Windows it works, but you must set a few 
 
 The launcher is local-only: it does not phone home or upload anything. Two things to know before sharing logs:
 
-- On startup the launcher writes `using repository <absolute path>` to `launcher.log` in Electron's userData directory (e.g. `~/Library/Application Support/deepseek-harness-desktop/` on macOS, `%APPDATA%\deepseek-harness-desktop\` on Windows). The log also captures the stdout/stderr of `pnpm install`, `pnpm run build`, and `dsh web`. If you paste this log into an issue, it will reveal your local directory layout and username.
+- On startup the launcher writes `using repository <absolute path>` to `launcher.log` in Electron's userData directory (e.g. `~/Library/Application Support/deepseek-harness-desktop/` on macOS, `%APPDATA%\deepseek-harness-desktop\` on Windows). The log also captures the stdout/stderr of `pnpm install`, `pnpm run build`, and `dsh web`. Browser authentication token values in URLs are replaced with `<redacted>`, but sharing the log still reveals your local directory layout and username.
 - The launcher inherits your environment when starting child processes (`pnpm`, `node`). If you export API keys or tokens in your shell, those environment variables are passed through to `dsh`. Do not paste environment output into a public issue.
 
 ## macOS package

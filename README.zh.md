@@ -26,7 +26,7 @@ pnpm dsh web
 
 ## 运行行为
 
-启动时，应用会定位代码库，将其当前 Git 提交与上次成功构建的桌面版本对比，如有需要则执行 `pnpm install --frozen-lockfile` 和 `pnpm run build`。随后启动构建好的 `dsh web --port 0`，等待系统分配的 loopback 地址，并在应用窗口中加载该地址。关闭应用时优雅退出 dsh。
+启动时，应用会定位代码库，将其当前 Git 提交与上次成功构建的桌面版本对比，如有需要则执行 `pnpm install --frozen-lockfile` 和 `pnpm run build`。随后启动构建好的 `dsh web --host 127.0.0.1 --port 0 --no-open`，等待完整的 loopback 就绪 URL（包括认证路径或查询参数），并在应用窗口中加载该地址。端口 `0` 表示由操作系统分配空闲端口，因此上游默认端口变化不会影响启动器。关闭应用时优雅退出 dsh。
 
 首次启动会弹出目录选择框，之后复用保存的路径。以下环境变量可覆盖自动查找：
 
@@ -34,6 +34,15 @@ pnpm dsh web
 - `DSH_NODE`：Node.js 的绝对路径。
 - `DSH_PNPM`：pnpm 的绝对路径。
 - `DSH_GIT`：Git 的绝对路径。
+
+容易随上游变化的启动约定已集中管理，也可以通过以下环境变量覆盖，无需修改启动器代码：
+
+- `DSH_DESKTOP_CLI_ENTRY`：相对于代码库根目录的构建后 CLI 入口，默认为 `apps/cli/lib/bin.js`。
+- `DSH_DESKTOP_WEB_HOST`：默认参数列表使用的监听地址，默认为 `127.0.0.1`。
+- `DSH_DESKTOP_WEB_PORT`：默认参数列表使用的端口，默认为 `0`，有效范围为 `0`–`65535`。
+- `DSH_DESKTOP_WEB_ARGS`：替换完整 Web 参数列表的非空 JSON 字符串数组。设置后优先于 `DSH_DESKTOP_WEB_HOST` 和 `DSH_DESKTOP_WEB_PORT`，例如 `["--profile","web","--port","0","--no-open"]`。
+- `DSH_DESKTOP_BUILD_ARTIFACTS`：用于判断是否需要重新构建的、相对于代码库根目录的文件列表，格式为非空 JSON 字符串数组。
+- `DSH_DESKTOP_START_TIMEOUT_MS` 和 `DSH_DESKTOP_SHUTDOWN_TIMEOUT_MS`：以毫秒为单位的正整数超时配置。
 
 启动器状态和日志存放在 Electron 的应用数据目录中，位于代码库之外。dsh 继续自行管理 `$DSH_HOME`、设置、凭据、配置和会话。
 
@@ -50,7 +59,7 @@ pnpm dsh web
 
 本启动器完全本地运行，不联网上报任何数据。分享日志前有两点需要注意：
 
-- 启动时，launcher 会把 `using repository <绝对路径>` 写入 Electron userData 目录下的 `launcher.log`（macOS 上比如 `~/Library/Application Support/deepseek-harness-desktop/`，Windows 上是 `%APPDATA%\deepseek-harness-desktop\`）。日志还会记录 `pnpm install`、`pnpm run build`、`dsh web` 的标准输出和标准错误。如果把这份日志贴到 issue 里，会暴露你的本地目录结构和用户名。
+- 启动时，launcher 会把 `using repository <绝对路径>` 写入 Electron userData 目录下的 `launcher.log`（macOS 上比如 `~/Library/Application Support/deepseek-harness-desktop/`，Windows 上是 `%APPDATA%\deepseek-harness-desktop\`）。日志还会记录 `pnpm install`、`pnpm run build`、`dsh web` 的标准输出和标准错误；URL 中的浏览器认证 token 会替换为 `<redacted>`，但分享日志仍会暴露本地目录结构和用户名。
 - 启动器启动子进程（`pnpm`、`node`）时会继承你的环境变量。如果 shell 里导出了 API key 或 token，这些环境变量会透传给 `dsh`。请不要把环境变量输出贴到公开 issue 中。
 
 ## macOS 打包
