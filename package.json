@@ -14,7 +14,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "package:mac": "pnpm run build && electron-builder --mac dmg",
     "package:mac-intel": "pnpm run build && electron-builder --mac dmg --x64",
-    "package:mac-all": "pnpm run build && electron-builder --mac dmg --arm64 --x64"
+    "package:mac-all": "pnpm run build && electron-builder --mac dmg --arm64 --x64 --publish never"
   },
   "build": {
     "appId": "ai.deepseek.harness.desktop.local",

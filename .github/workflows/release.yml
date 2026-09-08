@@ -48,7 +48,19 @@ jobs:
         run: pnpm run typecheck
 
       - name: Package arm64 and x64 DMGs
-        run: pnpm run package:mac-all
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if pnpm run package:mac-all; then
+              exit 0
+            fi
+            if [[ "$attempt" == 3 ]]; then
+              exit 1
+            fi
+            echo "Packaging attempt $attempt failed; retrying after $((attempt * 15)) seconds."
+            sleep "$((attempt * 15))"
+          done
 
       - name: Verify release artifacts
         shell: bash
