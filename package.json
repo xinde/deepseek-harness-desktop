@@ -36,7 +36,7 @@
       "target": [
         "dmg"
       ],
-      "artifactName": "DeepSeek Harness-${version}-${arch}.${ext}"
+      "artifactName": "DeepSeek-Harness-${version}-${arch}.${ext}"
     },
     "dmg": {
       "title": "DeepSeek Harness"

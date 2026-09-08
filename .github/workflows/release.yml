@@ -67,8 +67,8 @@ jobs:
         run: |
           set -euo pipefail
           version="$(node -p "require('./package.json').version")"
-          test -f "release/DeepSeek Harness-${version}-arm64.dmg"
-          test -f "release/DeepSeek Harness-${version}-x64.dmg"
+          test -f "release/DeepSeek-Harness-${version}-arm64.dmg"
+          test -f "release/DeepSeek-Harness-${version}-x64.dmg"
           (
             cd release
             shasum -a 256 ./*.dmg > SHA256SUMS.txt
