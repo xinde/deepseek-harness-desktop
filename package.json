@@ -2,6 +2,7 @@
   "name": "deepseek-harness-desktop",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@11.7.0",
   "author": "DeepSeek Harness Desktop contributors",
   "type": "module",
   "description": "External Electron launcher for a local deepseek-harness checkout",
@@ -12,7 +13,8 @@
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "package:mac": "pnpm run build && electron-builder --mac dmg",
-    "package:mac-intel": "pnpm run build && electron-builder --mac dmg --x64"
+    "package:mac-intel": "pnpm run build && electron-builder --mac dmg --x64",
+    "package:mac-all": "pnpm run build && electron-builder --mac dmg --arm64 --x64"
   },
   "build": {
     "appId": "ai.deepseek.harness.desktop.local",

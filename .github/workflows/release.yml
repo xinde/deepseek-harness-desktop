@@ -1,0 +1,95 @@
+name: Build and release desktop
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos-release:
+    name: Package macOS
+    runs-on: macos-14
+    timeout-minutes: 30
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 11.7.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Test
+        run: pnpm test
+
+      - name: Type-check
+        run: pnpm run typecheck
+
+      - name: Package arm64 and x64 DMGs
+        run: pnpm run package:mac-all
+
+      - name: Verify release artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          test -f "release/DeepSeek Harness-${version}-arm64.dmg"
+          test -f "release/DeepSeek Harness-${version}-x64.dmg"
+          (
+            cd release
+            shasum -a 256 ./*.dmg > SHA256SUMS.txt
+          )
+          short_sha="${GITHUB_SHA:0:12}"
+          echo "RELEASE_TAG=desktop-v${version}-${short_sha}" >> "$GITHUB_ENV"
+          echo "RELEASE_TITLE=DeepSeek Harness Desktop v${version} (${short_sha})" >> "$GITHUB_ENV"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: deepseek-harness-desktop-${{ github.sha }}
+          path: |
+            release/*.dmg
+            release/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub prerelease
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" release/*.dmg release/SHA256SUMS.txt --clobber
+          else
+            gh release create "$RELEASE_TAG" \
+              release/*.dmg \
+              release/SHA256SUMS.txt \
+              --target "$GITHUB_SHA" \
+              --title "$RELEASE_TITLE" \
+              --notes "Automated unsigned macOS build from the $GITHUB_REF_NAME branch at commit $GITHUB_SHA." \
+              --prerelease
+          fi

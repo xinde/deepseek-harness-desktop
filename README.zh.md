@@ -67,9 +67,16 @@ pnpm dsh web
 ```sh
 pnpm package:mac        # Apple Silicon (arm64)
 pnpm package:mac-intel  # Intel (x64)
+pnpm package:mac-all    # 同时构建两个架构
 ```
 
 DMG 会生成在 `release/` 目录下，文件名带架构后缀：`DeepSeek Harness-<version>-arm64.dmg` 或 `DeepSeek Harness-<version>-x64.dmg`。在跟本机架构不同的机器上首次构建会下载对应的 Electron 二进制。未签名的本地构建在别的机器上可能触发 Gatekeeper 警告；公开分发需要 Apple Developer 证书和 notarization。
+
+## GitHub 自动预发布
+
+每次向 `main` 推送后，GitHub Actions 会运行测试和类型检查，构建 arm64、x64 两个 DMG，生成 `SHA256SUMS.txt`，并发布到 tag 为 `desktop-v<版本号>-<提交号>` 的 GitHub Prerelease。同一批文件还会作为 Actions artifact 保留 30 天。安装包未签名，macOS 可能显示 Gatekeeper 警告。
+
+如需换成其他发布分支，修改 `.github/workflows/release.yml` 中的 `on.push.branches`。也可以在 GitHub Actions 页面手动运行该流程。
 
 ## 更新 dsh
 

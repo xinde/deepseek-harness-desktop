@@ -69,9 +69,16 @@ The launcher is local-only: it does not phone home or upload anything. Two thing
 ```sh
 pnpm package:mac        # Apple Silicon (arm64)
 pnpm package:mac-intel  # Intel (x64)
+pnpm package:mac-all    # Both architectures
 ```
 
 The DMG is written under `release/` and named with its architecture: `DeepSeek Harness-<version>-arm64.dmg` or `DeepSeek Harness-<version>-x64.dmg`. Building for a different architecture than your machine downloads the matching Electron binary on first run. An unsigned local build may trigger Gatekeeper warnings on another machine; public distribution requires an Apple Developer certificate and notarization.
+
+## Automated GitHub prereleases
+
+Every push to `main` runs tests and type-checking, builds arm64 and x64 DMGs, creates `SHA256SUMS.txt`, and publishes them to a GitHub prerelease tagged `desktop-v<version>-<commit>`. The same files are retained as a workflow artifact for 30 days. The packages are unsigned; macOS may show a Gatekeeper warning.
+
+To use another release branch, change `on.push.branches` in `.github/workflows/release.yml`. The workflow can also be run manually from the GitHub Actions page.
 
 ## Updating dsh
 
